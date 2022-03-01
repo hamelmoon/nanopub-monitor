@@ -32,134 +32,164 @@ import com.opencsv.CSVReader;
 
 public class ServerList implements Serializable {
 
-	private static final long serialVersionUID = -6272932136983159574L;
+    private static final long serialVersionUID = -6272932136983159574L;
 
-	private static ServerList serverList;
-	private static ServerIpInfo monitorIpInfo;
+    private static ServerList serverList;
+    private static ServerIpInfo monitorIpInfo;
 
-	public static ServerList get() {
-		if (serverList == null) {
-			serverList = new ServerList();
-		}
-		return serverList;
-	}
-
-	private static Map<NanopubService,ServerData> servers = new HashMap<NanopubService,ServerData>();
-
-	private ServerList() {
-		refresh();
-	}
-
-	public List<ServerData> getServerData() {
-		return ImmutableList.copyOf(servers.values());
-	}
-
-	public List<ServerData> getSortedServerData() {
-		List<ServerData> s = new ArrayList<ServerData>(servers.values());
-		Collections.sort(s, new Comparator<ServerData>() {
-			@Override
-			public int compare(ServerData o1, ServerData o2) {
-				if (!o1.getService().getTypeIri().equals(o2.getService().getTypeIri())) {
-					return o2.getService().getTypeIri().toString().compareTo(o1.getService().getTypeIri().toString());
-				}
-				if (o1.getIpInfo() == null || o1.getIpInfo().getIp() == null) return -1;
-				if (o2.getIpInfo() == null || o2.getIpInfo().getIp() == null) return 1;
-				if (o1.getIpInfo().getIp().equals(o2.getIpInfo().getIp())) {
-					return o1.getServiceId().compareTo(o2.getServiceId());
-				}
-				return o1.getIpInfo().getIp().compareTo(o2.getIpInfo().getIp());
-			}
-		});
-		return s;
-	}
-
-	public int getServerCount() {
-		return servers.size();
-	}
-
-	public ServerIpInfo getMonitorIpInfo() {
-		if (monitorIpInfo == null) {
-			try {
-				monitorIpInfo = ServerData.fetchIpInfo("");
-			} catch (Exception ex) {
-				ex.printStackTrace();
-			}
-		}
-		return monitorIpInfo;
-	}
-
-	public void refresh() {
-		refreshFromNanopubServerPeers();
-		refreshFromGrlc();
+    public static ServerList get() {
+        if (serverList == null) {
+            serverList = new ServerList();
+        }
+        return serverList;
     }
 
-	private static final ValueFactory vf = SimpleValueFactory.getInstance();
+    private static Map<NanopubService, ServerData> servers = new HashMap<NanopubService, ServerData>();
 
-	private void refreshFromNanopubServerPeers() {
-		ServerIterator serverIterator = new ServerIterator();
-		while (serverIterator.hasNext()) {
-			ServerInfo si = serverIterator.next();
-			NanopubService s = new NanopubService(vf.createIRI(si.getPublicUrl()), NanopubService.NANOPUB_SERVER_TYPE_IRI);
-			try {
-				if (servers.containsKey(s)) {
-					servers.get(s).update(si);
-				} else {
-					servers.put(s, new ServerData(s, si));
-				}
-			} catch (Exception ex) {
-				ex.printStackTrace();
-				if (servers.containsKey(s)) {
-					servers.get(s).update(null);
-				}
-			}
-		}
-	}
+    private ServerList() {
+        refresh();
+    }
 
-	private static RequestConfig requestConfig;
-	static {
-		requestConfig = RequestConfig.custom().setConnectTimeout(10000)
-				.setConnectionRequestTimeout(100).setSocketTimeout(10000)
-				.setCookieSpec(CookieSpecs.STANDARD).build();
-	}
+    public List<ServerData> getServerData() {
+        return ImmutableList.copyOf(servers.values());
+    }
 
-	private void refreshFromGrlc() {
-		HttpGet get = new HttpGet("http://grlc.nanopubs.lod.labs.vu.nl/api/local/local/find_valid_signed_nanopubs_with_pattern?graphpred=http%3A%2F%2Fwww.nanopub.org%2Fnschema%23hasAssertion&pred=http%3A%2F%2Fwww.w3.org%2F1999%2F02%2F22-rdf-syntax-ns%23type&obj=http%3A%2F%2Fpurl.org%2Fnanopub%2Fx%2FNanopubService");
-		get.setHeader("Accept", "text/csv");
-		try {
-			HttpResponse resp = HttpClientBuilder.create().setDefaultRequestConfig(requestConfig).build().execute(get);
-			int c = resp.getStatusLine().getStatusCode();
-			if (c < 200 && c >= 300) {
-				EntityUtils.consumeQuietly(resp.getEntity());
-				throw new IOException(resp.getStatusLine().toString());
-			}
-			CSVReader csvReader = null;
-			try {
-				csvReader = new CSVReader(new BufferedReader(new InputStreamReader(resp.getEntity().getContent())));
-				String[] line = null;
-				int n = 0;
-				while ((line = csvReader.readNext()) != null) {
-					n++;
-					if (n == 1) {
-						// ignore header line
-					} else {
-						Nanopub np = GetNanopub.get(line[0]);
-						for (Statement st : np.getAssertion()) {
-							if (!st.getPredicate().equals(RDF.TYPE)) continue;
-							if (!(st.getObject() instanceof IRI)) continue; 
-							if (st.getObject().stringValue().equals("http://purl.org/nanopub/x/NanopubService")) continue;
-							NanopubService ns = new NanopubService((IRI) st.getSubject(), (IRI) st.getObject());
-							if (!servers.containsKey(ns)) {
-								servers.put(ns, new ServerData(ns, null));
-							}
-						}
-					}
-				}
-			} finally {
-				if (csvReader != null) csvReader.close();
-			}
-		} catch (Exception ex) {
-			ex.printStackTrace();
-		}
-	}
+    public List<ServerData> getSortedServerData() {
+        List<ServerData> s = new ArrayList<ServerData>(servers.values());
+        Collections.sort(s, new Comparator<ServerData>() {
+            @Override
+            public int compare(ServerData o1, ServerData o2) {
+                if (!o1.getService().getTypeIri().equals(o2.getService().getTypeIri())) {
+                    return o2.getService().getTypeIri().toString().compareTo(o1.getService().getTypeIri().toString());
+                }
+                if (o1.getIpInfo() == null || o1.getIpInfo().getIp() == null) return -1;
+                if (o2.getIpInfo() == null || o2.getIpInfo().getIp() == null) return 1;
+                if (o1.getIpInfo().getIp().equals(o2.getIpInfo().getIp())) {
+                    return o1.getServiceId().compareTo(o2.getServiceId());
+                }
+                return o1.getIpInfo().getIp().compareTo(o2.getIpInfo().getIp());
+            }
+        });
+        return s;
+    }
+
+    public int getServerCount() {
+        return servers.size();
+    }
+
+    public ServerIpInfo getMonitorIpInfo() {
+        if (monitorIpInfo == null) {
+            try {
+                monitorIpInfo = ServerData.fetchIpInfo("");
+            } catch (Exception ex) {
+                ex.printStackTrace();
+            }
+        }
+        return monitorIpInfo;
+    }
+
+    public void refresh() {
+        refreshFromPeerConfig();
+//        refreshFromNanopubServerPeers();
+//        refreshFromGrlc();
+    }
+
+    private static final ValueFactory vf = SimpleValueFactory.getInstance();
+
+    private void refreshFromNanopubServerPeers() {
+        ServerIterator serverIterator = new ServerIterator();
+        while (serverIterator.hasNext()) {
+            ServerInfo si = serverIterator.next();
+            NanopubService s = new NanopubService(vf.createIRI(si.getPublicUrl()), NanopubService.NANOPUB_SERVER_TYPE_IRI);
+            try {
+                if (servers.containsKey(s)) {
+                    servers.get(s).update(si);
+                } else {
+                    servers.put(s, new ServerData(s, si));
+                }
+            } catch (Exception ex) {
+                ex.printStackTrace();
+                if (servers.containsKey(s)) {
+                    servers.get(s).update(null);
+                }
+            }
+        }
+    }
+
+    private void refreshFromPeerConfig() {
+        for (String peer : MonitorConf.get().getInitialPeers()) {
+            ServerInfo si = null;
+            try {
+                si = ServerInfo.load(peer);
+            } catch (ServerInfo.ServerInfoException e) {
+                e.printStackTrace();
+            }
+
+            if (si != null) {
+                NanopubService s = new NanopubService(vf.createIRI(si.getPublicUrl()), NanopubService.NANOPUB_SERVER_TYPE_IRI);
+                try {
+
+
+                    if (servers.containsKey(s)) {
+                        servers.get(s).update(si);
+                    } else {
+                        servers.put(s, new ServerData(s, si));
+                    }
+                } catch (Exception ex) {
+                    ex.printStackTrace();
+                    if (servers.containsKey(s)) {
+                        servers.get(s).update(null);
+                    }
+                }
+            }
+        }
+    }
+
+    private static RequestConfig requestConfig;
+
+    static {
+        requestConfig = RequestConfig.custom().setConnectTimeout(10000).setConnectionRequestTimeout(100).setSocketTimeout(10000).setCookieSpec(CookieSpecs.STANDARD).build();
+    }
+
+    private void refreshFromGrlc() {
+        HttpGet get = new HttpGet("http://grlc.nanopubs.lod.labs.vu.nl/api/local/local/find_valid_signed_nanopubs_with_pattern?graphpred=http%3A%2F%2Fwww.nanopub.org%2Fnschema%23hasAssertion&pred=http%3A%2F%2Fwww.w3.org%2F1999%2F02%2F22-rdf-syntax-ns%23type&obj=http%3A%2F%2Fpurl.org%2Fnanopub%2Fx%2FNanopubService");
+        get.setHeader("Accept", "text/csv");
+        try {
+            HttpResponse resp = HttpClientBuilder.create().setDefaultRequestConfig(requestConfig).build().execute(get);
+            int c = resp.getStatusLine().getStatusCode();
+            if (c < 200 && c >= 300) {
+                EntityUtils.consumeQuietly(resp.getEntity());
+                throw new IOException(resp.getStatusLine().toString());
+            }
+            CSVReader csvReader = null;
+            try {
+                csvReader = new CSVReader(new BufferedReader(new InputStreamReader(resp.getEntity().getContent())));
+                String[] line = null;
+                int n = 0;
+                while ((line = csvReader.readNext()) != null) {
+                    n++;
+                    if (n == 1) {
+                        // ignore header line
+                    } else {
+                        Nanopub np = GetNanopub.get(line[0]);
+                        for (Statement st : np.getAssertion()) {
+                            if (!st.getPredicate().equals(RDF.TYPE)) continue;
+                            if (!(st.getObject() instanceof IRI)) continue;
+                            if (st.getObject().stringValue().equals("http://purl.org/nanopub/x/NanopubService"))
+                                continue;
+                            NanopubService ns = new NanopubService((IRI) st.getSubject(), (IRI) st.getObject());
+                            if (!servers.containsKey(ns)) {
+                                servers.put(ns, new ServerData(ns, null));
+                            }
+                        }
+                    }
+                }
+            } finally {
+                if (csvReader != null) csvReader.close();
+            }
+        } catch (Exception ex) {
+            ex.printStackTrace();
+        }
+    }
 
 }

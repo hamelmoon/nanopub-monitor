@@ -46,4 +46,10 @@ public class MonitorConf {
 		return Boolean.parseBoolean(conf.getProperty("get-geoip-info"));
 	}
 
+	public String[] getInitialPeers() {
+		String s = conf.getProperty("initial.peers");
+		if (s == null) return new String[] {};
+		return s.split(" ");
+	}
+
 }
